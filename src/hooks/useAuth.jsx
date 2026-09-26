@@ -10,22 +10,28 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Sesión inicial (carga de página normal)
+    // Detectar error OAuth en query params (?error=bad_oauth_state...)
+    // Limpiar la URL y mostrar la pantalla de login limpia
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('error')) {
+      console.warn('[auth] OAuth error:', params.get('error_description'))
+      window.history.replaceState(null, '', '/')
+    }
+
+    // Sesión inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
     })
 
-    // Escuchar cambios de estado de autenticación
+    // Escuchar cambios de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
 
       if (event === 'SIGNED_IN') {
-        // Limpiar el hash fragment del callback OAuth (#access_token=...)
-        // y redirigir al dashboard
+        // Limpiar hash fragment del callback OAuth y redirigir al dashboard
         if (window.location.hash.includes('access_token')) {
-          // Reemplazar la URL actual sin el hash antes de navegar
-          window.history.replaceState(null, '', window.location.pathname)
+          window.history.replaceState(null, '', '/')
           navigate('/dashboard', { replace: true })
         }
       }
@@ -42,8 +48,8 @@ export function AuthProvider({ children }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // Redirigir a la raíz — Supabase procesa el hash token ahí
-        // y onAuthStateChange dispara SIGNED_IN para redirigir al dashboard
+        // Redirigir a la raíz — implicit flow devuelve el token como hash (#access_token=...)
+        // detectSessionInUrl lo procesa automáticamente
         redirectTo: window.location.origin,
       },
     })
